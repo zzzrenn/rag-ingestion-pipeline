@@ -1,0 +1,7 @@
+pydantic
+pymupdf
+openai
+qdrant-client
+azure-search-documents
+azure-core
+python-dotenv
