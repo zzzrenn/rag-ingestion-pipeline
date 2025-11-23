@@ -3,7 +3,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import argparse
+import os
+
 def test_retrieval():
+    parser = argparse.ArgumentParser(description="Run retrieval with specific configuration.")
+    parser.add_argument("--db_type", default="qdrant", help="Vector Database Type (e.g., qdrant, azure)")
+    parser.add_argument("--embedder_type", default="openai", help="Embedder Type (e.g., openai)")
+    args = parser.parse_args()
+
+    if args.db_type:
+        os.environ["VECTOR_DB_TYPE"] = args.db_type
+    if args.embedder_type:
+        os.environ["EMBEDDER_TYPE"] = args.embedder_type
+
     print("Initializing RAG Client...")
     client = RAGClient()
     

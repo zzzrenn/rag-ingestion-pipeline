@@ -39,7 +39,19 @@ Answer:"""
     
     return response.choices[0].message.content
 
+import argparse
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run RAG generation with specific configuration.")
+    parser.add_argument("--db_type", default="qdrant", help="Vector Database Type (e.g., qdrant, azure)")
+    parser.add_argument("--embedder_type", default="openai", help="Embedder Type (e.g., openai)")
+    args = parser.parse_args()
+
+    if args.db_type:
+        os.environ["VECTOR_DB_TYPE"] = args.db_type
+    if args.embedder_type:
+        os.environ["EMBEDDER_TYPE"] = args.embedder_type
+
     query = "first line of defense for hypertension in pregnancy."
     answer = generate_response(query)
     print("\n--- Generated Answer ---")
