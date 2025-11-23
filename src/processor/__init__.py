@@ -1,5 +1,5 @@
 from .base import BaseCleaner, BaseChunker
 from .cleaner import SimpleCleaner
-from .chunker import RecursiveChunker
+from .chunker import ParentChildChunker
 
-__all__ = ['BaseCleaner', 'BaseChunker', 'SimpleCleaner', 'RecursiveChunker']
+__all__ = ['BaseCleaner', 'BaseChunker', 'SimpleCleaner', 'ParentChildChunker']

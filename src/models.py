@@ -17,6 +17,10 @@ class DocMetadata(BaseModel):
     page_number: Optional[int] = None
     source_filename: Optional[str] = None
     
+    # Parent-Child Fields
+    parent_id: Optional[str] = None
+    parent_text: Optional[str] = None
+    
     def __init__(self, **data):
         super().__init__(**data)
         if self.created_at is None:

@@ -47,8 +47,36 @@ class RAGClient:
         embedded_docs = self.embedder.embed([dummy_doc])
         query_vector = embedded_docs[0].embedding
         
-        if not query_vector:
-             return []
-
-        # 3. Search
-        return self.db.search(query_vector, limit=limit, filters=sanitized_filters)
+        # 3. Search (Child Chunks)
+        child_docs = self.db.search(query_vector, limit=limit * 2, filters=sanitized_filters) # Fetch more children to ensure enough parents
+        
+        # 4. Deduplicate to Parent Chunks
+        seen_parents = set()
+        parent_docs = []
+        
+        for doc in child_docs:
+            parent_id = doc.metadata.parent_id
+            if parent_id and parent_id not in seen_parents:
+                seen_parents.add(parent_id)
+                
+                # Create Parent Document
+                # Use parent_text as content
+                parent_content = doc.metadata.parent_text or doc.content # Fallback if missing
+                
+                # Create new metadata without parent fields to avoid confusion? 
+                # Or keep them. Let's keep them but update ID.
+                new_metadata = doc.metadata.model_copy()
+                
+                # We construct a new Document representing the Parent
+                parent_doc = Document(
+                    id=parent_id, # Use parent ID
+                    content=parent_content,
+                    metadata=new_metadata,
+                    score=doc.score # Use max child score? Or just first found.
+                )
+                parent_docs.append(parent_doc)
+                
+                if len(parent_docs) >= limit:
+                    break
+                    
+        return parent_docs

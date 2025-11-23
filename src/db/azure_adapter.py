@@ -41,7 +41,11 @@ class AzureAdapter(BaseVectorDB):
 
     def _ensure_index(self):
         index_client = SearchIndexClient(endpoint=self.endpoint, credential=self.credential)
+        
+        # Check if index exists
         if self.index_name not in [i.name for i in index_client.list_indexes()]:
+            print(f"Creating index {self.index_name}...")
+            
             # Define Index
             fields = [
                 SimpleField(name="id", type="Edm.String", key=True),
@@ -53,6 +57,8 @@ class AzureAdapter(BaseVectorDB):
                 SimpleField(name="created_at", type="Edm.DateTimeOffset", filterable=True),
                 SimpleField(name="page_number", type="Edm.Int32", filterable=True),
                 SimpleField(name="source_filename", type="Edm.String", filterable=True),
+                SimpleField(name="parent_id", type="Edm.String", filterable=True),
+                SearchableField(name="parent_text", type="Edm.String"),
             ]
             
             vector_search = VectorSearch(

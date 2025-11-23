@@ -15,6 +15,7 @@ def test_retrieval():
     print(f"Found {len(results)} results:")
     for i, doc in enumerate(results):
         print(f"\n--- Result {i+1} (Score: {doc.score}) ---")
+        print(f"Content Length: {len(doc.content)} chars")
         print(f"Content: {doc.content[:200]}...")
         print(f"Metadata: {doc.metadata}")
 

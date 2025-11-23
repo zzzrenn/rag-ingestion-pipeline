@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from src.models import DocMetadata
 from src.loader.factory import LoaderFactory
 from src.processor.cleaner import SimpleCleaner
-from src.processor.chunker import RecursiveChunker
+from src.processor.chunker import ParentChildChunker
 from src.embedder import EmbedderFactory
 from src.db import VectorDBFactory
 
@@ -34,7 +34,7 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
 
     # 3. Processor (Cleaner & Chunker)
     cleaner = SimpleCleaner()
-    chunker = RecursiveChunker()
+    chunker = ParentChildChunker()
     
     processed_docs = []
     for doc in documents:

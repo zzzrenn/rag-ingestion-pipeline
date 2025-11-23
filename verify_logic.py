@@ -13,7 +13,7 @@ sys.modules['azure.search.documents'] = MagicMock()
 from src.models import DocMetadata, Document, SourceType
 from src.loader.pdf_loader import PDFLoader
 from src.processor.cleaner import SimpleCleaner
-from src.processor.chunker import RecursiveChunker
+from src.processor.chunker import ParentChildChunker
 from src.embedder.openai_embedder import OpenAIEmbedder
 from src.db.qdrant_adapter import QdrantAdapter
 from src.rag_client import RAGClient
@@ -39,7 +39,7 @@ def test_pipeline_logic():
     # 2. Test Processor Logic
     print("2. Testing Processors...")
     cleaner = SimpleCleaner()
-    chunker = RecursiveChunker(chunk_size=50)
+    chunker = ParentChildChunker(parent_chunk_size=50, child_chunk_size=10, child_chunk_overlap=0)
     
     raw_text = "Hello   World! \x00"
     cleaned = cleaner.clean(raw_text)
@@ -48,8 +48,9 @@ def test_pipeline_logic():
     
     doc = Document(content="A" * 100, metadata=docs[0].metadata)
     chunks = chunker.chunk(doc)
-    assert len(chunks) > 1
-    print("   RecursiveChunker passed.")
+    assert len(chunks) > 0
+    assert chunks[0].metadata.parent_id is not None
+    print(f"   ParentChildChunker passed. Created {len(chunks)} chunks.")
 
     # 3. Test Embedder Logic (Mocking OpenAI)
     print("3. Testing OpenAIEmbedder...")
@@ -79,7 +80,9 @@ def test_pipeline_logic():
             "source_type": "pdf",
             "product": "product_a",
             "content_type": "other",
-            "content": "Found content"
+            "content": "Found content",
+            "parent_id": "parent_uuid",
+            "parent_text": "Parent content"
         }
         mock_hit.score = 0.9
         mock_qdrant.return_value.query_points.return_value.points = [mock_hit]
@@ -91,7 +94,6 @@ def test_pipeline_logic():
 
     # 5. Test RAG Client with Factories
     print("5. Testing RAGClient & Factories...")
-    # We need to mock the factory creation or the classes themselves
     
     with patch('src.embedder.openai_embedder.OpenAI') as mock_openai, \
          patch('src.db.qdrant_adapter.QdrantClient') as mock_qdrant:
@@ -110,7 +112,9 @@ def test_pipeline_logic():
             "source_type": "pdf",
             "product": "product_a",
             "content_type": "other",
-            "content": "Found content"
+            "content": "Found content",
+            "parent_id": "parent_uuid",
+            "parent_text": "Parent content"
         }
         mock_hit.score = 0.9
         mock_qdrant_instance.query_points.return_value.points = [mock_hit]
@@ -119,10 +123,14 @@ def test_pipeline_logic():
         os.environ["EMBEDDER_TYPE"] = "openai"
         os.environ["VECTOR_DB_TYPE"] = "qdrant"
         
-        client = RAGClient() # Should use factories now
+        client = RAGClient() 
         results = client.retrieve("query", filters={"product": "product_a"})
         
+        # Should return parent doc
         assert len(results) == 1
+        assert results[0].id == "parent_uuid"
+        assert results[0].content == "Parent content"
+        
         mock_qdrant_instance.query_points.assert_called()
         print("   RAGClient with Factories passed.")
 
