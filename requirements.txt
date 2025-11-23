@@ -9,3 +9,8 @@ langchain-text-splitters
 
 # Sparse Embeddings
 fastembed
+
+# Async support
+aiofiles
+httpx
+aiohttp

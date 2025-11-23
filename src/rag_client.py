@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 from src.models import ProductType, ContentType, SourceType, Document, DocMetadata
@@ -43,7 +44,7 @@ class RAGClient:
         else:
             self.db = VectorDBFactory.create(db_type)
 
-    def retrieve(self, query: str, filters: Optional[Dict[str, str]] = None, limit: int = 5, hybrid_search: bool = None):
+    async def retrieve(self, query: str, filters: Optional[Dict[str, str]] = None, limit: int = 5, hybrid_search: bool = None):
         """
         Retrieve documents relevant to the query
         
@@ -72,7 +73,7 @@ class RAGClient:
         
         # 2. Embed query (dense vector)
         dummy_doc = Document(content=query, metadata=DocMetadata(source_type='markdown'))
-        embedded_docs = self.embedder.embed([dummy_doc])
+        embedded_docs = await self.embedder.embed([dummy_doc])
         query_vector = embedded_docs[0].embedding
         
         # 3. Prepare hybrid search parameters based on DB type
@@ -86,14 +87,14 @@ class RAGClient:
             if self.db_type == "qdrant":
                 # Generate sparse vector for Qdrant
                 if self.sparse_embedder:
-                    sparse_docs = self.sparse_embedder.embed([dummy_doc])
+                    sparse_docs = await self.sparse_embedder.embed([dummy_doc])
                     sparse_query_vector = sparse_docs[0].sparse_embedding
             elif self.db_type == "azure":
                 # Pass query text for Azure hybrid search
                 search_text = query
         
         # 4. Search (Child Chunks) - both params passed, each DB uses what it needs
-        child_docs = self.db.search(
+        child_docs = await self.db.search(
             query_vector,
             limit=limit * 2,  # Fetch more children to ensure enough parents
             filters=sanitized_filters,

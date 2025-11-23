@@ -4,14 +4,14 @@ from src.models import Document
 
 class BaseVectorDB(ABC):
     @abstractmethod
-    def upsert(self, documents: List[Document], **kwargs):
+    async def upsert(self, documents: List[Document], **kwargs):
         """
-        Upsert documents into the database.
+        Insert or update documents in the vector database.
         """
         pass
 
     @abstractmethod
-    def search(
+    async def search(
         self, 
         query_vector: List[float], 
         limit: int = 5, 

@@ -4,8 +4,14 @@ from src.models import Document
 
 class BaseEmbedder(ABC):
     @abstractmethod
-    def embed(self, documents: List[Document]) -> List[Document]:
+    async def embed(self, documents: List[Document]) -> List[Document]:
         """
-        Generate embeddings for a list of documents.
+        Generate embeddings for a list of documents asynchronously.
+        
+        Args:
+            documents: List of documents to embed
+            
+        Returns:
+            Same documents with embedding field populated
         """
         pass

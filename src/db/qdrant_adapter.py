@@ -1,6 +1,6 @@
 import os
 from typing import List, Dict, Optional
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as rest
 from src.models import Document, DocMetadata
 from src.db.base import BaseVectorDB
@@ -9,26 +9,46 @@ from src.db.factory import VectorDBFactory
 @VectorDBFactory.register("qdrant")
 class QdrantAdapter(BaseVectorDB):
     def __init__(self, collection_name: str = "rag_collection", use_hybrid: bool = False):
-        self.client = QdrantClient(
-            url=os.getenv("QDRANT_URL"),
-            api_key=os.getenv("QDRANT_API_KEY")
-        )
+        self.url = os.getenv("QDRANT_URL")
+        self.api_key = os.getenv("QDRANT_API_KEY")
         self.collection_name = collection_name
         self.use_hybrid = use_hybrid
-        self._ensure_collection(use_hybrid=use_hybrid)
+        self._client = None
+    
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup client"""
+        if self._client:
+            await self._client.close()
+    
+    async def _get_client(self) -> AsyncQdrantClient:
+        """Lazy initialize async client"""
+        if self._client is None:
+            self._client = AsyncQdrantClient(
+                url=self.url,
+                api_key=self.api_key,
+                timeout=60.0
+            )
+            # Pass the client explicitly to avoid recursion
+            await self._ensure_collection(self._client, use_hybrid=self.use_hybrid)
+        return self._client
 
-    def _ensure_collection(self, use_hybrid: bool = False):
+    async def _ensure_collection(self, client: AsyncQdrantClient, use_hybrid: bool = False):
         """
         Ensure collection exists with appropriate vector configuration
         
         Args:
             use_hybrid: If True, configure collection for hybrid search (dense + sparse)
         """
-        collections = self.client.get_collections()
+        collections = await client.get_collections()
+        
         if self.collection_name not in [c.name for c in collections.collections]:
             if use_hybrid:
                 # Create collection with both dense and sparse vectors
-                self.client.create_collection(
+                await client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config={
                         "dense": rest.VectorParams(size=1536, distance=rest.Distance.COSINE)
@@ -39,13 +59,15 @@ class QdrantAdapter(BaseVectorDB):
                 )
             else:
                 # Dense-only (backward compatible)
-                self.client.create_collection(
+                await client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=rest.VectorParams(size=1536, distance=rest.Distance.COSINE)
                 )
 
-    def upsert(self, documents: List[Document], batch_size: int = 50):
+    async def upsert(self, documents: List[Document], batch_size: int = 50):
+        client = await self._get_client()
         points = []
+        
         for doc in documents:
             if not doc.embedding:
                 continue
@@ -76,12 +98,13 @@ class QdrantAdapter(BaseVectorDB):
             # Batch the upsert
             for i in range(0, len(points), batch_size):
                 batch = points[i:i + batch_size]
-                self.client.upsert(
+                await client.upsert(
                     collection_name=self.collection_name,
-                    points=batch
+                    points=batch,
+                    wait=False
                 )
 
-    def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None, 
+    async def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None, 
                sparse_query_vector: Optional[dict] = None, search_text: Optional[str] = None) -> List[Document]:
         """
         Search for documents using dense or hybrid (dense + sparse) retrieval
@@ -98,7 +121,9 @@ class QdrantAdapter(BaseVectorDB):
         """
         # Note: search_text is ignored - Qdrant uses sparse_query_vector for hybrid
         
+        client = await self._get_client()
         query_filter = None
+        
         if filters:
             must_conditions = []
             for key, value in filters.items():
@@ -112,8 +137,8 @@ class QdrantAdapter(BaseVectorDB):
 
         # Perform hybrid or dense-only search
         if self.use_hybrid and sparse_query_vector:
-            # Hybrid search with both dense and sparse using prefetch + RRF
-            results = self.client.query_points(
+            # Hybrid search using prefetch with RRF fusion
+            results = await client.query_points(
                 collection_name=self.collection_name,
                 prefetch=[
                     rest.Prefetch(
@@ -133,24 +158,27 @@ class QdrantAdapter(BaseVectorDB):
                 query=rest.FusionQuery(fusion=rest.Fusion.RRF),
                 query_filter=query_filter,
                 limit=limit
-            ).points
+            )
+            results = results.points
         elif self.use_hybrid:
             # Dense-only on a hybrid collection (use named vector)
-            results = self.client.query_points(
+            results = await client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 using="dense",
                 query_filter=query_filter,
                 limit=limit
-            ).points
+            )
+            results = results.points
         else:
             # Dense-only search on single-vector collection (backward compatible)
-            results = self.client.query_points(
+            results = await client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 query_filter=query_filter,
                 limit=limit
-            ).points
+            )
+            results = results.points
         
         documents = []
         for hit in results:
@@ -158,8 +186,6 @@ class QdrantAdapter(BaseVectorDB):
             content = payload.pop('content')
             
             # Reconstruct metadata
-            # Note: This assumes payload matches DocMetadata structure exactly
-            # We might need to handle type conversions if they were lost (e.g. Enums to str)
             metadata = DocMetadata(**payload)
             
             documents.append(Document(

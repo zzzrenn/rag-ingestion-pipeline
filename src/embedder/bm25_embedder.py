@@ -1,4 +1,5 @@
 from typing import List
+import asyncio
 from fastembed import SparseTextEmbedding
 from src.models import Document
 from src.embedder.base import BaseEmbedder
@@ -17,7 +18,7 @@ class BM25Embedder(BaseEmbedder):
         """
         self.model = SparseTextEmbedding(model_name=model_name)
     
-    def embed(self, documents: List[Document]) -> List[Document]:
+    async def embed(self, documents: List[Document]) -> List[Document]:
         """
         Generate sparse BM25 embeddings for documents
         
@@ -29,8 +30,10 @@ class BM25Embedder(BaseEmbedder):
         """
         texts = [doc.content for doc in documents]
         
-        # Generate sparse embeddings
-        embeddings = list(self.model.embed(texts))
+        # fastembed doesn't have async support, run in thread pool
+        embeddings = await asyncio.to_thread(
+            lambda: list(self.model.embed(texts))
+        )
         
         # Convert to dict format expected by Qdrant
         for doc, embedding in zip(documents, embeddings):

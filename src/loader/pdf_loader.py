@@ -1,36 +1,48 @@
-import fitz  # PyMuPDF
 from typing import List
-from src.models import Document, DocMetadata, SourceType
+import asyncio
+import fitz  # PyMuPDF
+from src.models import Document, DocMetadata
 from src.loader.base import BaseLoader
+from src.loader.factory import LoaderFactory
 
+@LoaderFactory.register(".pdf")
 class PDFLoader(BaseLoader):
-    def load(self, file_path: str, **kwargs) -> List[Document]:
+    async def load(self, file_path: str, **metadata_kwargs) -> List[Document]:
+        """
+        Load a PDF file asynchronously and extract text from each page
+        
+        Args:
+            file_path: Path to the PDF file
+            **metadata_kwargs: Additional metadata fields
+            
+        Returns:
+            List of Document objects, one per page
+        """
+        # PyMuPDF is not async, run in thread pool
+        documents = await asyncio.to_thread(self._load_sync, file_path, **metadata_kwargs)
+        return documents
+    
+    def _load_sync(self, file_path: str, **metadata_kwargs) -> List[Document]:
+        """Synchronous PDF loading"""
+        pdf_document = fitz.open(file_path)
         documents = []
-        doc = fitz.open(file_path)
         
-        # Extract metadata from kwargs or use defaults
-        product = kwargs.get('product')
-        content_type = kwargs.get('content_type')
-        
-        for page_num, page in enumerate(doc):
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
             text = page.get_text()
-            if not text.strip():
-                continue
-                
-            metadata = DocMetadata(
-                source_type='pdf',
-                source_filename=file_path.split('/')[-1].split('\\')[-1], # Handle both separators
-                page_number=page_num + 1
-            )
             
-            if product:
-                metadata.product = product
-            if content_type:
-                metadata.content_type = content_type
-                
-            documents.append(Document(
-                content=text,
-                metadata=metadata
-            ))
+            # Build metadata - merge with provided metadata
+            # Ensure source_type defaults to 'pdf' if not provided
+            metadata_dict = {
+                'source_type': 'pdf',
+                'page_number': page_num + 1,
+                'source_filename': file_path.split('/')[-1],
+                **metadata_kwargs  # User-provided metadata can override defaults
+            }
             
+            metadata = DocMetadata(**metadata_dict)
+            doc = Document(content=text, metadata=metadata)
+            documents.append(doc)
+            
+        pdf_document.close()
         return documents
