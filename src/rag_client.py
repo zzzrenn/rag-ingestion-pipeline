@@ -8,14 +8,38 @@ from src.db import VectorDBFactory
 load_dotenv()
 
 class RAGClient:
-    def __init__(self):
+    def __init__(self, use_hybrid: bool = None):
+        """
+        Initialize RAG Client
+        
+        Args:
+            use_hybrid: If True, use hybrid search (dense + sparse BM25). If None, reads from env.
+        """
         embedder_type = os.getenv("EMBEDDER_TYPE", "openai")
         db_type = os.getenv("VECTOR_DB_TYPE", "qdrant")
         
+        # Determine hybrid search usage
+        if use_hybrid is None:
+            use_hybrid = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
+        self.use_hybrid = use_hybrid
+        
         self.embedder = EmbedderFactory.create(embedder_type)
-        self.db = VectorDBFactory.create(db_type)
+        
+        # Initialize sparse embedder for hybrid search
+        self.sparse_embedder = None
+        if self.use_hybrid:
+            try:
+                from src.embedder.bm25_embedder import BM25Embedder
+                self.sparse_embedder = BM25Embedder()
+            except ImportError:
+                raise Exception("Warning: fastembed not installed.")        
+        # Pass use_hybrid to Qdrant adapter
+        if db_type == "qdrant":
+            self.db = VectorDBFactory.create(db_type, use_hybrid=self.use_hybrid)
+        else:
+            self.db = VectorDBFactory.create(db_type)
 
-    def retrieve(self, query: str, filters: Optional[Dict[str, str]] = None, limit: int = 5):
+    def retrieve(self, query: str, filters: Optional[Dict[str, str]] = None, limit: int = 5, hybrid_search: bool = None):
         # 1. Sanitize filters
         sanitized_filters = {}
         if filters:
@@ -47,8 +71,21 @@ class RAGClient:
         embedded_docs = self.embedder.embed([dummy_doc])
         query_vector = embedded_docs[0].embedding
         
+        # Generate sparse vector for hybrid search
+        if hybrid_search is None:
+            hybrid_search = self.use_hybrid
+        sparse_query_vector = None
+        if self.use_hybrid and self.sparse_embedder and hybrid_search:
+            sparse_docs = self.sparse_embedder.embed([dummy_doc])
+            sparse_query_vector = sparse_docs[0].sparse_embedding
+        
         # 3. Search (Child Chunks)
-        child_docs = self.db.search(query_vector, limit=limit * 2, filters=sanitized_filters) # Fetch more children to ensure enough parents
+        child_docs = self.db.search(
+            query_vector, 
+            limit=limit * 2, 
+            filters=sanitized_filters,
+            sparse_query_vector=sparse_query_vector
+        ) # Fetch more children to ensure enough parents
         
         # 4. Deduplicate to Parent Chunks
         seen_parents = set()

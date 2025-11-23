@@ -6,3 +6,6 @@ azure-search-documents
 azure-core
 python-dotenv
 langchain-text-splitters
+
+# Sparse Embeddings
+fastembed

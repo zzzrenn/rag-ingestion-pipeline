@@ -46,10 +46,23 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
 
     # 4. Embedder
     embedder_type = os.getenv("EMBEDDER_TYPE", "openai")
+    use_hybrid = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
+    
     try:
         embedder = EmbedderFactory.create(embedder_type)
         embedded_docs = embedder.embed(processed_docs)
         print(f"Embeddings generated using {embedder_type}.")
+        
+        # Generate sparse embeddings if hybrid search is enabled
+        if use_hybrid:
+            try:
+                from src.embedder.bm25_embedder import BM25Embedder
+                sparse_embedder = BM25Embedder()
+                embedded_docs = sparse_embedder.embed(embedded_docs)
+                print("Sparse BM25 embeddings generated.")
+            except ImportError:
+                print("Warning: fastembed not installed. Skipping sparse embeddings.")
+                use_hybrid = False
     except Exception as e:
         print(f"Embedding failed: {e}")
         return
@@ -57,7 +70,11 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
     # 5. Database
     db_type = os.getenv("VECTOR_DB_TYPE", "qdrant")
     try:
-        db = VectorDBFactory.create(db_type)
+        # Pass use_hybrid to Qdrant adapter
+        if db_type == "qdrant":
+            db = VectorDBFactory.create(db_type, use_hybrid=use_hybrid)
+        else:
+            db = VectorDBFactory.create(db_type)
         db.upsert(embedded_docs)
         print(f"Documents upserted to database using {db_type}.")
     except Exception as e:

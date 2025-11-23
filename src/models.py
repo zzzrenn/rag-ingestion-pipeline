@@ -31,6 +31,7 @@ class Document(BaseModel):
     content: str
     metadata: DocMetadata
     embedding: Optional[List[float]] = None
+    sparse_embedding: Optional[dict] = None  # For BM25: {"indices": [...], "values": [...]}
     score: Optional[float] = None
     
     def __init__(self, **data):
