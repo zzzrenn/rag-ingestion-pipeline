@@ -10,10 +10,11 @@ class ParentChildChunker(BaseChunker):
             chunk_size=parent_chunk_size,
             chunk_overlap=0,
             separators=[
-                r"[.?!。？！]+\s+",  # Match punctuation + whitespace (non-capturing)
                 "\n\n", 
-                "\n", 
-                " "
+                "\n",
+                r"[.?!。？！]+\s*",  # Match punctuation + optional whitespace (for Chinese)
+                # r"[,，、]+\s*", # Match comma + optional whitespace (for Chinese)
+                # " "
             ],
             is_separator_regex=True,
             keep_separator="start"  # Punctuation+space goes to START of next chunk, we'll strip it later
@@ -22,10 +23,11 @@ class ParentChildChunker(BaseChunker):
             chunk_size=child_chunk_size,
             chunk_overlap=child_chunk_overlap,
             separators=[
-                r"[.?!。？！]+\s+",  # Match punctuation + whitespace (non-capturing)
                 "\n\n", 
                 "\n", 
-                " "
+                r"[.?!。？！]+\s*",  # Match punctuation + optional whitespace (for Chinese)
+                # r"[,，、]+\s*", # Match comma + optional whitespace (for Chinese)
+                # " "
             ],
             is_separator_regex=True,
             keep_separator="start"  # Punctuation+space goes to START of next chunk, we'll strip it later
@@ -35,11 +37,11 @@ class ParentChildChunker(BaseChunker):
         """Move punctuation from start of chunk to end of previous chunk"""
         processed = []
         for i, chunk in enumerate(chunks):
-            if i > 0 and chunk and chunk[0] in '.?!。？！':
+            if i > 0 and chunk and chunk[0] in ',.?!，、。？！':
                 # Find where punctuation ends
                 punct_end = 0
                 for j, char in enumerate(chunk):
-                    if char in '.?!。？！':
+                    if char in ',.?!，、。？！':
                         punct_end = j + 1
                     else:
                         break
