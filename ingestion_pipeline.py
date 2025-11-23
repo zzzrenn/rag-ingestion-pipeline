@@ -47,6 +47,7 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
     # 4. Embedder
     embedder_type = os.getenv("EMBEDDER_TYPE", "openai")
     use_hybrid = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
+    db_type = os.getenv("VECTOR_DB_TYPE", "qdrant")
     
     try:
         embedder = EmbedderFactory.create(embedder_type)
@@ -54,7 +55,7 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
         print(f"Embeddings generated using {embedder_type}.")
         
         # Generate sparse embeddings if hybrid search is enabled
-        if use_hybrid:
+        if use_hybrid and db_type == "qdrant":
             try:
                 from src.embedder.bm25_embedder import BM25Embedder
                 sparse_embedder = BM25Embedder()
@@ -68,7 +69,6 @@ def ingest_file(file_path: str, raw_metadata: Dict[str, Any]):
         return
 
     # 5. Database
-    db_type = os.getenv("VECTOR_DB_TYPE", "qdrant")
     try:
         # Pass use_hybrid to Qdrant adapter
         if db_type == "qdrant":

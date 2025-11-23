@@ -82,7 +82,7 @@ class QdrantAdapter(BaseVectorDB):
                 )
 
     def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None, 
-               sparse_query_vector: Optional[dict] = None) -> List[Document]:
+               sparse_query_vector: Optional[dict] = None, search_text: Optional[str] = None) -> List[Document]:
         """
         Search for documents using dense or hybrid (dense + sparse) retrieval
         
@@ -90,11 +90,14 @@ class QdrantAdapter(BaseVectorDB):
             query_vector: Dense embedding vector
             limit: Number of results to return
             filters: Metadata filters
-            sparse_query_vector: Optional sparse BM25 vector for hybrid search {"indices": [...], "values": [...]}
+            sparse_query_vector: Optional sparse BM25 vector for hybrid search
+            search_text: Ignored for Qdrant (used by Azure)
             
         Returns:
             List of matching documents
         """
+        # Note: search_text is ignored - Qdrant uses sparse_query_vector for hybrid
+        
         query_filter = None
         if filters:
             must_conditions = []

@@ -75,9 +75,8 @@ class AzureAdapter(BaseVectorDB):
             if not doc.embedding:
                 continue
                 
-            # Azure Search expects a flat dictionary usually, or specific structure
-            # We'll flatten it for simplicity or map it to the index schema
-            # Assuming index has fields: id, content, embedding, source_type, product, etc.
+            # Azure Search expects a flat dictionary
+            # Note: sparse_embedding is ignored for Azure
             item = {
                 "id": str(doc.id),
                 "content": doc.content,
@@ -89,7 +88,23 @@ class AzureAdapter(BaseVectorDB):
         if batch:
             self.client.upload_documents(documents=batch)
 
-    def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None) -> List[Document]:
+    def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None,
+               sparse_query_vector: Optional[dict] = None, search_text: Optional[str] = None) -> List[Document]:
+        """
+        Search using Azure AI Search
+        
+        Args:
+            query_vector: Dense embedding vector
+            limit: Number of results
+            filters: Metadata filters
+            sparse_query_vector: Ignored for Azure (Qdrant-specific)
+            search_text: Optional query text for hybrid search (BM25 + vector)
+            
+        Returns:
+            List of matching documents
+        """
+        # Note: sparse_query_vector is ignored - Azure uses search_text for hybrid search
+        
         # Construct OData filter
         odata_filter = None
         if filters:
@@ -100,7 +115,7 @@ class AzureAdapter(BaseVectorDB):
             odata_filter = " and ".join(conditions)
 
         results = self.client.search(
-            search_text=None, # Pure vector search if text is None
+            search_text=search_text,
             vector_queries=[VectorizedQuery(vector=query_vector, k_nearest_neighbors=limit, fields="embedding")],
             filter=odata_filter,
             top=limit
