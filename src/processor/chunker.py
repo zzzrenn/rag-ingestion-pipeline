@@ -9,19 +9,54 @@ class ParentChildChunker(BaseChunker):
         self.parent_splitter = RecursiveCharacterTextSplitter(
             chunk_size=parent_chunk_size,
             chunk_overlap=0,
-            separators=["\n\n", "\n", " ", ""]
+            separators=[
+                r"[.?!。？！]+\s+",  # Match punctuation + whitespace (non-capturing)
+                "\n\n", 
+                "\n", 
+                " "
+            ],
+            is_separator_regex=True,
+            keep_separator="start"  # Punctuation+space goes to START of next chunk, we'll strip it later
         )
         self.child_splitter = RecursiveCharacterTextSplitter(
             chunk_size=child_chunk_size,
             chunk_overlap=child_chunk_overlap,
-            separators=["\n\n", "\n", " ", ""]
+            separators=[
+                r"[.?!。？！]+\s+",  # Match punctuation + whitespace (non-capturing)
+                "\n\n", 
+                "\n", 
+                " "
+            ],
+            is_separator_regex=True,
+            keep_separator="start"  # Punctuation+space goes to START of next chunk, we'll strip it later
         )
+    
+    def _post_process_chunks(self, chunks):
+        """Move punctuation from start of chunk to end of previous chunk"""
+        processed = []
+        for i, chunk in enumerate(chunks):
+            if i > 0 and chunk and chunk[0] in '.?!。？！':
+                # Find where punctuation ends
+                punct_end = 0
+                for j, char in enumerate(chunk):
+                    if char in '.?!。？！':
+                        punct_end = j + 1
+                    else:
+                        break
+                # Move punctuation to previous chunk
+                if processed:
+                    processed[-1] += chunk[:punct_end]
+                chunk = chunk[punct_end:].lstrip()
+            if chunk:  # Only add non-empty chunks
+                processed.append(chunk)
+        return processed
 
     def chunk(self, document: Document) -> List[Document]:
         text = document.content
         
         # 1. Split into Parent Chunks
-        parent_chunks = self.parent_splitter.split_text(text)
+        parent_chunks_raw = self.parent_splitter.split_text(text)
+        parent_chunks = self._post_process_chunks(parent_chunks_raw)
         
         child_documents = []
         
@@ -29,7 +64,8 @@ class ParentChildChunker(BaseChunker):
             parent_id = str(uuid4())
             
             # 2. Split Parent into Child Chunks
-            child_chunks = self.child_splitter.split_text(parent_text)
+            child_chunks_raw = self.child_splitter.split_text(parent_text)
+            child_chunks = self._post_process_chunks(child_chunks_raw)
             
             for child_text in child_chunks:
                 # Create new metadata with parent info
