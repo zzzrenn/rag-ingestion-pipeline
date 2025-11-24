@@ -11,7 +11,7 @@ class OpenAIEmbedder(BaseEmbedder):
         self.client = AsyncOpenAI()
         self.model = model
     
-    async def embed(self, documents: List[Document]) -> List[Document]:
+    async def embed(self, documents: List[Document], is_query: bool = False) -> List[Document]:
         """
         Generate embeddings asynchronously with batching
         

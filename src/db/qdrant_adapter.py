@@ -46,12 +46,13 @@ class QdrantAdapter(BaseVectorDB):
         collections = await client.get_collections()
         
         if self.collection_name not in [c.name for c in collections.collections]:
+            vector_size = int(os.getenv("VECTOR_SIZE", "1536"))
             if use_hybrid:
                 # Create collection with both dense and sparse vectors
                 await client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config={
-                        "dense": rest.VectorParams(size=1536, distance=rest.Distance.COSINE)
+                        "dense": rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
                     },
                     sparse_vectors_config={
                         "sparse": rest.SparseVectorParams()
@@ -61,7 +62,7 @@ class QdrantAdapter(BaseVectorDB):
                 # Dense-only (backward compatible)
                 await client.create_collection(
                     collection_name=self.collection_name,
-                    vectors_config=rest.VectorParams(size=1536, distance=rest.Distance.COSINE)
+                    vectors_config=rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
                 )
 
     async def upsert(self, documents: List[Document], batch_size: int = 50):

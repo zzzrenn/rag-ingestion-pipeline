@@ -9,6 +9,7 @@ langchain-text-splitters
 
 # Sparse Embeddings
 fastembed
+sentence-transformers
 
 # Async support
 aiofiles

@@ -73,8 +73,12 @@ class RAGClient:
         
         # 2. Embed query (dense vector)
         dummy_doc = Document(content=query, metadata=DocMetadata(source_type='markdown'))
-        embedded_docs = await self.embedder.embed([dummy_doc])
+        embedded_docs = await self.embedder.embed([dummy_doc], is_query=True)
         query_vector = embedded_docs[0].embedding
+        
+        # Auto-detect vector size and set env var for DB adapters
+        if query_vector:
+            os.environ["VECTOR_SIZE"] = str(len(query_vector))
         
         # 3. Prepare hybrid search parameters based on DB type
         if hybrid_search is None:

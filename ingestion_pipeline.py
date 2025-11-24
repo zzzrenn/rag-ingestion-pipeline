@@ -65,6 +65,12 @@ async def aingest_file(file_path: str, raw_metadata: Dict[str, Any]):
             except ImportError:
                 print("Warning: fastembed not installed. Skipping sparse embeddings.")
                 use_hybrid = False
+        # Auto-detect vector size from the first embedding
+        if embedded_docs and embedded_docs[0].embedding:
+            vector_size = len(embedded_docs[0].embedding)
+            os.environ["VECTOR_SIZE"] = str(vector_size)
+            print(f"Detected vector size: {vector_size}. Set VECTOR_SIZE env var.")
+            
     except Exception as e:
         print(f"Embedding failed: {e}")
         return

@@ -69,10 +69,11 @@ class AzureAdapter(BaseVectorDB):
             print(f"Creating index {self.index_name}...")
             
             # Define Index
+            vector_size = int(os.getenv("VECTOR_SIZE", "1536"))
             fields = [
                 SimpleField(name="id", type="Edm.String", key=True),
                 SearchableField(name="content", type="Edm.String"),
-                SearchField(name="embedding", type="Collection(Edm.Single)", vector_search_dimensions=1536, vector_search_profile_name="my-vector-config"),
+                SearchField(name="embedding", type="Collection(Edm.Single)", vector_search_dimensions=vector_size, vector_search_profile_name="my-vector-config"),
                 SimpleField(name="source_type", type="Edm.String", filterable=True),
                 SimpleField(name="product", type="Edm.String", filterable=True),
                 SimpleField(name="content_type", type="Edm.String", filterable=True),

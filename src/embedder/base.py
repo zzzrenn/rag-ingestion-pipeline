@@ -4,7 +4,7 @@ from src.models import Document
 
 class BaseEmbedder(ABC):
     @abstractmethod
-    async def embed(self, documents: List[Document]) -> List[Document]:
+    async def embed(self, documents: List[Document], is_query: bool = False) -> List[Document]:
         """
         Generate embeddings for a list of documents asynchronously.
         

@@ -18,7 +18,7 @@ class BM25Embedder(BaseEmbedder):
         """
         self.model = SparseTextEmbedding(model_name=model_name)
     
-    async def embed(self, documents: List[Document]) -> List[Document]:
+    async def embed(self, documents: List[Document], is_query: bool = False) -> List[Document]:
         """
         Generate sparse BM25 embeddings for documents
         
