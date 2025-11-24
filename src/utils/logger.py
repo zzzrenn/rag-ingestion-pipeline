@@ -28,12 +28,12 @@ def time_execution(func):
             
             end_time = time.time()
             duration = end_time - start_time
-            logger.info(f"'{func.__name__}' executed in {duration:.4f} seconds")
+            logger.info(f"'{func.__module__}.{func.__qualname__}' executed in {duration:.4f} seconds")
             return result
         except Exception as e:
             end_time = time.time()
             duration = end_time - start_time
-            logger.error(f"'{func.__name__}' failed after {duration:.4f} seconds with error: {e}")
+            logger.error(f"'{func.__module__}.{func.__qualname__}' failed after {duration:.4f} seconds with error: {e}")
             raise e
 
     @functools.wraps(func)
@@ -43,12 +43,12 @@ def time_execution(func):
             result = func(*args, **kwargs)
             end_time = time.time()
             duration = end_time - start_time
-            logger.info(f"'{func.__name__}' executed in {duration:.4f} seconds")
+            logger.info(f"'{func.__module__}.{func.__qualname__}' executed in {duration:.4f} seconds")
             return result
         except Exception as e:
             end_time = time.time()
             duration = end_time - start_time
-            logger.error(f"'{func.__name__}' failed after {duration:.4f} seconds with error: {e}")
+            logger.error(f"'{func.__module__}.{func.__qualname__}' failed after {duration:.4f} seconds with error: {e}")
             raise e
 
     if asyncio.iscoroutinefunction(func):
