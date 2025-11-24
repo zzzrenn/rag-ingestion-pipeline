@@ -1,40 +1,40 @@
 import os
-from typing import List, Dict, Optional
+import asyncio
+from typing import List, Dict, Optional, Any
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.indexes.aio import SearchIndexClient
-from src.models import Document, DocMetadata
-from src.db.base import BaseVectorDB
-from src.db.factory import VectorDBFactory
-
 from azure.search.documents.indexes.models import (
     SearchIndex,
     SimpleField,
-    SearchField,
     SearchableField,
+    SearchField,
     VectorSearch,
     HnswAlgorithmConfiguration,
     VectorSearchProfile
 )
 from azure.search.documents.models import VectorizedQuery
+from src.models import Document, DocMetadata
+from src.db.base import BaseVectorDB
+from src.db.factory import VectorDBFactory
+from src.utils.logger import logger, time_execution
+
 
 @VectorDBFactory.register("azure")
 class AzureAdapter(BaseVectorDB):
     def __init__(self, index_name: str = "rag-index"):
-        endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-        key = os.getenv("AZURE_SEARCH_API_KEY")
-        
-        if not endpoint or not key:
-             pass
-
+        self.endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
+        self.api_key = os.getenv("AZURE_SEARCH_API_KEY")
         self.index_name = index_name
-        self.credential = AzureKeyCredential(key)
-        self.endpoint = endpoint
+        self.credential = AzureKeyCredential(self.api_key)
         self._client = None
         self._index_client = None
+        
+        logger.info(f"Initialized AzureAdapter for index '{index_name}'")
 
     async def __aenter__(self):
         """Async context manager entry"""
+        await self._get_client()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -43,6 +43,7 @@ class AzureAdapter(BaseVectorDB):
             await self._client.close()
         if self._index_client:
             await self._index_client.close()
+        logger.debug("Azure clients closed")
 
     async def _get_client(self) -> SearchClient:
         """Lazy initialize async search client"""
@@ -66,7 +67,7 @@ class AzureAdapter(BaseVectorDB):
         index_names = [i.name async for i in self._index_client.list_indexes()]
         
         if self.index_name not in index_names:
-            print(f"Creating index {self.index_name}...")
+            logger.info(f"Creating index {self.index_name}...")
             
             # Define Index
             vector_size = int(os.getenv("VECTOR_SIZE", "1536"))
@@ -91,11 +92,13 @@ class AzureAdapter(BaseVectorDB):
             
             index = SearchIndex(name=self.index_name, fields=fields, vector_search=vector_search)
             await self._index_client.create_index(index)
+            logger.info(f"Index {self.index_name} created.")
 
-    async def upsert(self, documents: List[Document], **kwargs):
+    @time_execution
+    async def upsert(self, documents: List[Document], batch_size: int = 50):
         client = await self._get_client()
-        batch = []
         
+        batch = []
         for doc in documents:
             if not doc.embedding:
                 continue
@@ -109,11 +112,13 @@ class AzureAdapter(BaseVectorDB):
                 **doc.metadata.model_dump()
             }
             batch.append(item)
-            
+                
         if batch:
             await client.upload_documents(documents=batch)
+            logger.debug(f"Uploaded final batch of {len(batch)} documents")
 
-    async def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None,
+    @time_execution
+    async def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None, 
                sparse_query_vector: Optional[dict] = None, search_text: Optional[str] = None) -> List[Document]:
         """
         Search using Azure AI Search
@@ -168,4 +173,5 @@ class AzureAdapter(BaseVectorDB):
                 score=score
             ))
             
+        logger.info(f"Found {len(documents)} results.")
         return documents

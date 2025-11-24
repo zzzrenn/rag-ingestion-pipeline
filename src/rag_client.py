@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from src.models import ProductType, ContentType, SourceType, Document, DocMetadata
 from src.embedder import EmbedderFactory
 from src.db import VectorDBFactory
+from src.utils.logger import logger, time_execution
 
 load_dotenv()
 
@@ -27,6 +28,8 @@ class RAGClient:
             use_hybrid = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
         self.use_hybrid = use_hybrid
         
+        logger.info(f"Initializing RAG Client with embedder={embedder_type}, db={db_type}, hybrid={use_hybrid}")
+        
         self.embedder = EmbedderFactory.create(embedder_type)
         
         # Initialize sparse embedder for Qdrant hybrid search only
@@ -35,7 +38,9 @@ class RAGClient:
             try:
                 from src.embedder.bm25_embedder import BM25Embedder
                 self.sparse_embedder = BM25Embedder()
+                logger.info("Initialized BM25 sparse embedder for hybrid search")
             except ImportError:
+                logger.error("fastembed not installed. Required for Qdrant hybrid search.")
                 raise Exception("fastembed not installed. Required for Qdrant hybrid search.")
         
         # Initialize database adapter
@@ -44,6 +49,7 @@ class RAGClient:
         else:
             self.db = VectorDBFactory.create(db_type)
 
+    @time_execution
     async def retrieve(self, query: str, filters: Optional[Dict[str, str]] = None, limit: int = 5, hybrid_search: bool = None):
         """
         Retrieve documents relevant to the query
@@ -57,6 +63,8 @@ class RAGClient:
         Returns:
             List of parent documents
         """
+        logger.info(f"Retrieving for query: '{query}'")
+        
         # 1. Sanitize filters
         sanitized_filters = {}
         if filters:
@@ -70,6 +78,7 @@ class RAGClient:
                 elif key == 'source_type':
                     if value in ['pdf', 'markdown']:
                         sanitized_filters[key] = value
+            logger.debug(f"Sanitized filters: {sanitized_filters}")
         
         # 2. Embed query (dense vector)
         dummy_doc = Document(content=query, metadata=DocMetadata(source_type='markdown'))
@@ -129,5 +138,6 @@ class RAGClient:
                 
                 if len(parent_docs) >= limit:
                     break
-                    
+        
+        logger.info(f"Retrieved {len(parent_docs)} parent documents")
         return parent_docs

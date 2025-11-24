@@ -5,38 +5,44 @@ from qdrant_client.http import models as rest
 from src.models import Document, DocMetadata
 from src.db.base import BaseVectorDB
 from src.db.factory import VectorDBFactory
+from src.utils.logger import logger, time_execution
 
 @VectorDBFactory.register("qdrant")
 class QdrantAdapter(BaseVectorDB):
     def __init__(self, collection_name: str = "rag_collection", use_hybrid: bool = False):
-        self.url = os.getenv("QDRANT_URL")
-        self.api_key = os.getenv("QDRANT_API_KEY")
         self.collection_name = collection_name
+        self.client = None
         self.use_hybrid = use_hybrid
-        self._client = None
-    
+        
+        # Default to localhost if not set
+        self.url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        self.api_key = os.getenv("QDRANT_API_KEY")
+        
+        logger.info(f"Initialized QdrantAdapter for collection '{collection_name}' (hybrid={use_hybrid})")
+
     async def __aenter__(self):
         """Async context manager entry"""
+        await self._get_client()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup client"""
-        if self._client:
-            await self._client.close()
-    
+        if self.client:
+            await self.client.close()
+            logger.debug("Qdrant client closed")
+
     async def _get_client(self) -> AsyncQdrantClient:
         """Lazy initialize async client"""
-        if self._client is None:
-            self._client = AsyncQdrantClient(
+        if self.client is None:
+            self.client = AsyncQdrantClient(
                 url=self.url,
                 api_key=self.api_key,
-                timeout=60.0
+                timeout=60.0 # Increase timeout to avoid ResponseHandlingException
             )
-            # Pass the client explicitly to avoid recursion
-            await self._ensure_collection(self._client, use_hybrid=self.use_hybrid)
-        return self._client
+            await self._ensure_collection(self.client, self.use_hybrid)
+        return self.client
 
-    async def _ensure_collection(self, client: AsyncQdrantClient, use_hybrid: bool = False):
+    async def _ensure_collection(self, client: AsyncQdrantClient, use_hybrid: bool):
         """
         Ensure collection exists with appropriate vector configuration
         
@@ -47,6 +53,8 @@ class QdrantAdapter(BaseVectorDB):
         
         if self.collection_name not in [c.name for c in collections.collections]:
             vector_size = int(os.getenv("VECTOR_SIZE", "1536"))
+            logger.info(f"Creating collection '{self.collection_name}' with vector_size={vector_size}, hybrid={use_hybrid}")
+            
             if use_hybrid:
                 # Create collection with both dense and sparse vectors
                 await client.create_collection(
@@ -65,10 +73,14 @@ class QdrantAdapter(BaseVectorDB):
                     vectors_config=rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
                 )
 
-    async def upsert(self, documents: List[Document], batch_size: int = 50):
+    @time_execution
+    async def upsert(self, documents: List[Document], batch_size: int = 64):
+        """
+        Upsert documents into Qdrant asynchronously with batching
+        """
         client = await self._get_client()
-        points = []
         
+        points = []
         for doc in documents:
             if not doc.embedding:
                 continue
@@ -88,7 +100,7 @@ class QdrantAdapter(BaseVectorDB):
             else:
                 # Dense-only for backward compatibility
                 vector_dict = doc.embedding
-            
+
             points.append(rest.PointStruct(
                 id=str(doc.id),
                 vector=vector_dict,
@@ -104,7 +116,8 @@ class QdrantAdapter(BaseVectorDB):
                     points=batch,
                     wait=False
                 )
-
+    
+    @time_execution
     async def search(self, query_vector: List[float], limit: int = 5, filters: Optional[Dict] = None, 
                sparse_query_vector: Optional[dict] = None, search_text: Optional[str] = None) -> List[Document]:
         """
@@ -196,4 +209,5 @@ class QdrantAdapter(BaseVectorDB):
                 score=hit.score
             ))
             
+        logger.info(f"Found {len(documents)} results.")
         return documents

@@ -10,8 +10,11 @@ langchain-text-splitters
 # Sparse Embeddings
 fastembed
 sentence-transformers
+optimum[onnxruntime]==1.26.0
+transformers==4.47.1
 
 # Async support
 aiofiles
 httpx
 aiohttp
+loguru
